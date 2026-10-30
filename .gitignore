@@ -1,0 +1,10 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.log
+
+# Store packages are bound to the publisher's identity; build them locally
+store/out/
+*.msix
+*.msixupload

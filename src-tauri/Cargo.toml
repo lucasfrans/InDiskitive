@@ -1,0 +1,33 @@
+[package]
+name = "indiskitive"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lucas Fransen"]
+description = "See where your disk space went. A fast treemap disk usage viewer for Windows."
+license = "MIT"
+repository = "https://github.com/lucasfrans/InDiskitive"
+
+[lib]
+name = "indiskitive_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+rayon = "1"
+sysinfo = { version = "0.37", default-features = false, features = ["disk"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_Storage_Packaging_Appx"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
