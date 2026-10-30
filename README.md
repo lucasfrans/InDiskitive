@@ -16,7 +16,7 @@
 
 ## Download
 
-Download **[InDiskitive.exe](https://github.com/lucasfrans/InDiskitive/raw/main/InDiskitive.exe)** straight from this repo, or grab it from the **[Releases page](https://github.com/lucasfrans/InDiskitive/releases/latest)**. It is a single portable file, with no installer.
+Download **[InDiskitive.exe](https://github.com/lucasfrans/InDiskitive/raw/refs/heads/main/InDiskitive.exe)** straight from this repo, or grab it from the **[Releases page](https://github.com/lucasfrans/InDiskitive/releases/latest)**. It is a single portable file, with no installer.
 
 Windows may show a SmartScreen warning because the file is not code-signed. Choose **More info, then Run anyway**. It requires the Microsoft Edge WebView2 runtime, which is already included in Windows 11 and up-to-date Windows 10.
 
