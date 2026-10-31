@@ -5,7 +5,7 @@
   "description": "See where your disk space went. A fast treemap disk usage viewer for Windows.",
   "license": "MIT",
   "repository": "github:lucasfrans/InDiskitive",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",

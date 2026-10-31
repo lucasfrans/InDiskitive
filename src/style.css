@@ -182,3 +182,5 @@ kbd { font: 10px var(--mono); color: var(--dim); border: 1px solid var(--line); 
 .tip small.hint { color: var(--faint); margin-top: 2px; }
 .zoom .fly { color: var(--ink); border-right: 1px solid var(--line); letter-spacing: .02em; }
 .zoom .fly:disabled { color: var(--dim); }
+/* easter egg overlay */
+.map-wrap canvas.egg { position: absolute; inset: 0; pointer-events: none; z-index: 3; }

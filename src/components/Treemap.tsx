@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { N } from "../types";
 import { CATS, catOf, fmt, pathOf, pct } from "../util";
+import { runWarthog } from "../egg";
 
 interface Rect { n: N; x: number; y: number; w: number; h: number; d: number; leaf: boolean }
 interface Props {
@@ -83,6 +84,9 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp, onReve
   });
   const [zoomPct, setZoomPct] = useState(100);
   const [flying, setFlying] = useState(false);
+  const eggRef = useRef<HTMLCanvasElement>(null);
+  const eggBusy = useRef(false);
+  const eggKeys = useRef<number[]>([]);
   const stopFly = useCallback(() => {
     const s = st.current;
     if (s.anim) { cancelAnimationFrame(s.anim); s.anim = 0; setFlying(false); }
@@ -259,10 +263,40 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp, onReve
 
   useEffect(() => { stopFly(); resetCam(); layout(); }, [view, layout, resetCam, stopFly]);
 
+  // Easter egg (Ctrl x4): an A-10 strafes a tile. Visual only; nothing is deleted.
+  const strike = useCallback(() => {
+    const s = st.current;
+    if (eggBusy.current || s.W === 0 || !eggRef.current) return;
+    const onScreen = (r: Rect) => r.x + r.w > s.ox && r.x < s.ox + s.W && r.y + r.h > s.oy && r.y < s.oy + s.H;
+    let r = props.current.sel ? s.rects.find((q) => q.n === props.current.sel) : undefined;
+    if (!r || !onScreen(r)) {
+      const leaves = s.rects.filter((q) => q.leaf && q.d > 0 && q.n.k === 1 && onScreen(q)).sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 10);
+      r = leaves[Math.floor(Math.random() * leaves.length)] ?? s.rects.find((q) => q.leaf && onScreen(q));
+    }
+    if (!r) return;
+    const x0 = Math.max(r.x, s.ox) - s.ox, x1 = Math.min(r.x + r.w, s.ox + s.W) - s.ox;
+    const y0 = Math.max(r.y, s.oy) - s.oy, y1 = Math.min(r.y + r.h, s.oy + s.H) - s.oy;
+    eggBusy.current = true;
+    stopFly();
+    runWarthog(
+      eggRef.current, s.W, s.H, s.dpr,
+      { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, label: r.n.k === 2 ? "small files" : r.n.n },
+      (dx, dy) => { if (wrap.current) wrap.current.style.transform = dx || dy ? `translate(${dx}px,${dy}px)` : ""; },
+      () => { eggBusy.current = false; },
+    );
+  }, [stopFly]);
+
   // keyboard: + / - zoom, 0 resets (not while typing in the command line)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (st.current.anim) stopFly();
+      if (e.key === "Control" && !e.repeat) {
+        const now = performance.now();
+        const hits = eggKeys.current.filter((x) => now - x < 1400);
+        hits.push(now);
+        eggKeys.current = hits;
+        if (hits.length >= 4) { eggKeys.current = []; strike(); }
+      }
       if (document.activeElement?.tagName === "INPUT") return;
       const s = st.current;
       if (e.key === "+" || e.key === "=") zoomAt(s.W / 2, s.H / 2, 1.6);
@@ -271,7 +305,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp, onReve
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [zoomAt, resetCam, layout]);
+  }, [zoomAt, resetCam, layout, stopFly, strike]);
   useEffect(schedule, [sel, marked, cat, schedule]);
 
   const hit = (ev: React.MouseEvent) => {
@@ -339,6 +373,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp, onReve
         }}
         onContextMenu={(ev) => { ev.preventDefault(); if (st.current.z > 1) { resetCam(); layout(); } else onUp(); }}
       />
+      <canvas ref={eggRef} className="egg" />
       <div className="zoom">
         <button className="fly" onClick={fly} disabled={flying} title="Slow cinematic zoom out (any input stops it)">{flying ? "…" : "Pull out"}</button>
         <button onClick={() => zoomAt(st.current.W / 2, st.current.H / 2, 1 / 1.6)} title="Zoom out (-)" disabled={zoomPct <= 100}>−</button>
