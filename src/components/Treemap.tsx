@@ -11,6 +11,7 @@ interface Props {
   onSelect: (n: N) => void;
   onZoom: (n: N) => void;
   onUp: () => void;
+  onReveal: (n: N) => void;
 }
 
 function squarify(kids: N[], x: number, y: number, w: number, h: number, out: (n: N, x: number, y: number, w: number, h: number) => void) {
@@ -43,27 +44,49 @@ function squarify(kids: N[], x: number, y: number, w: number, h: number, out: (n
   }
 }
 
+// Slight per-file brightness variation so large areas of one type stay readable.
+const FACTORS = [0.84, 0.92, 1, 1.07, 1.14];
+const tintCache = new Map<string, string>();
+function tint(hex: string, name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const k = Math.abs(h) % FACTORS.length;
+  const key = hex + k;
+  let v = tintCache.get(key);
+  if (!v) {
+    const ch = (o: number) => Math.min(255, Math.round(parseInt(hex.slice(o, o + 2), 16) * FACTORS[k]));
+    v = `rgb(${ch(1)},${ch(3)},${ch(5)})`;
+    tintCache.set(key, v);
+  }
+  return v;
+}
+
 const FONT = "11px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
 
 function hatch(): CanvasPattern | null {
   const c = document.createElement("canvas");
   c.width = c.height = 8;
   const g = c.getContext("2d")!;
-  g.strokeStyle = "rgba(94,234,212,.7)";
+  g.strokeStyle = "rgba(11,14,18,.6)";
   g.lineWidth = 2;
   g.beginPath(); g.moveTo(-2, 10); g.lineTo(10, -2); g.stroke();
   return g.createPattern(c, "repeat");
 }
 
-export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Props) {
+export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp, onReveal }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const tip = useRef<HTMLDivElement>(null);
   const st = useRef({
     rects: [] as Rect[], W: 0, H: 0, dpr: 1, hover: null as Rect | null, raf: 0, lraf: 0, pat: null as CanvasPattern | null,
-    z: 1, ox: 0, oy: 0, down: null as { x: number; y: number; ox: number; oy: number } | null, moved: false,
+    z: 1, ox: 0, oy: 0, down: null as { x: number; y: number; ox: number; oy: number } | null, moved: false, anim: 0,
   });
   const [zoomPct, setZoomPct] = useState(100);
+  const [flying, setFlying] = useState(false);
+  const stopFly = useCallback(() => {
+    const s = st.current;
+    if (s.anim) { cancelAnimationFrame(s.anim); s.anim = 0; setFlying(false); }
+  }, []);
   const props = useRef({ view, sel, marked, cat });
   props.current = { view, sel, marked, cat };
 
@@ -99,7 +122,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
         continue;
       }
       const c = catOf(n);
-      const base = c ? CATS[c].color : "#1b222b";
+      const base = c ? tint(CATS[c].color, n.n) : "#1b222b";
       const dim = cat && c !== cat;
       ctx.globalAlpha = dim ? 0.15 : 1;
       ctx.fillStyle = base;
@@ -123,7 +146,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
       for (const r of s.rects) {
         if (!marked.has(r.n)) continue;
         if (s.pat) { ctx.fillStyle = s.pat; ctx.fillRect(r.x, r.y, r.w, r.h); }
-        ctx.strokeStyle = "#5eead4"; ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
         ctx.strokeRect(r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2));
       }
     }
@@ -206,11 +229,40 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     return () => ro.disconnect();
   }, [layout]);
 
-  useEffect(() => { resetCam(); layout(); }, [view, layout, resetCam]);
+  // One-off cinematic pull-back: start deep inside one tile, ease out to the whole map.
+  const fly = useCallback(() => {
+    const s = st.current;
+    if (s.anim || s.W === 0 || s.rects.length === 0) return;
+    const wantSel = props.current.sel;
+    let target = wantSel ? s.rects.find((r) => r.n === wantSel) : undefined;
+    if (!target) {
+      const leaves = s.rects.filter((r) => r.leaf && r.d > 0).sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 8);
+      target = leaves[Math.floor(Math.random() * leaves.length)] ?? s.rects[0];
+    }
+    const fx = (target.x + target.w / 2) / s.z, fy = (target.y + target.h / 2) / s.z;
+    const z0 = Math.min(120, Math.max(6, (s.W * 0.8) / Math.max(4, target.w / s.z)));
+    const dur = 5500, t0 = performance.now();
+    setFlying(true);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / dur);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const z = Math.exp(Math.log(z0) * (1 - e));
+      s.z = z; s.ox = fx * z - s.W / 2; s.oy = fy * z - s.H / 2;
+      clampCam();
+      setZoomPct(Math.round(z * 100));
+      layout();
+      if (t < 1) s.anim = requestAnimationFrame(step);
+      else { s.anim = 0; resetCam(); layout(); setFlying(false); }
+    };
+    s.anim = requestAnimationFrame(step);
+  }, [layout, resetCam]);
+
+  useEffect(() => { stopFly(); resetCam(); layout(); }, [view, layout, resetCam, stopFly]);
 
   // keyboard: + / - zoom, 0 resets (not while typing in the command line)
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      if (st.current.anim) stopFly();
       if (document.activeElement?.tagName === "INPUT") return;
       const s = st.current;
       if (e.key === "+" || e.key === "=") zoomAt(s.W / 2, s.H / 2, 1.6);
@@ -255,7 +307,10 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     b.textContent = n.k === 2 ? "Small files" : pathOf(n);
     const sm = document.createElement("small");
     sm.textContent = `${fmt(n.s)} · ${pct(n.s, props.current.view.s)} of view · ${n.f.toLocaleString()} file${n.f === 1 ? "" : "s"}`;
-    t.replaceChildren(b, sm);
+    const hint = document.createElement("small");
+    hint.className = "hint";
+    hint.textContent = n.k === 1 ? "double-click or ctrl+click: show in Explorer" : "double-click: open · ctrl+click: show in Explorer";
+    t.replaceChildren(b, sm, hint);
     t.hidden = false;
     const w = wrap.current!.getBoundingClientRect();
     let tx = ev.clientX - w.left + 14, ty = ev.clientY - w.top + 16;
@@ -270,19 +325,22 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
         ref={cv}
         className={zoomPct > 100 ? "zoomed" : ""}
         onMouseMove={onMove}
-        onMouseDown={(ev) => { const s = st.current; s.down = { x: ev.clientX, y: ev.clientY, ox: s.ox, oy: s.oy }; s.moved = false; }}
+        onMouseDown={(ev) => { stopFly(); const s = st.current; s.down = { x: ev.clientX, y: ev.clientY, ox: s.ox, oy: s.oy }; s.moved = false; }}
         onMouseUp={() => { st.current.down = null; }}
-        onWheel={(ev) => { const b = cv.current!.getBoundingClientRect(); zoomAt(ev.clientX - b.left, ev.clientY - b.top, Math.exp(-ev.deltaY * 0.0018)); }}
+        onWheel={(ev) => { stopFly(); const b = cv.current!.getBoundingClientRect(); zoomAt(ev.clientX - b.left, ev.clientY - b.top, Math.exp(-ev.deltaY * 0.0018)); }}
         onMouseLeave={() => { const s = st.current; s.hover = null; s.down = null; tip.current!.hidden = true; schedule(); }}
-        onClick={(ev) => { if (st.current.moved) { st.current.moved = false; return; } const r = hit(ev); if (r) onSelect(r.n); }}
+        onClick={(ev) => { if (st.current.moved) { st.current.moved = false; return; } const r = hit(ev); if (r) { onSelect(r.n); if (ev.ctrlKey || ev.metaKey) onReveal(r.n); } }}
         onDoubleClick={(ev) => {
           const r = hit(ev);
-          const n = r && (r.n.k === 0 ? r.n : r.n.p);
+          if (!r) return;
+          if (r.n.k === 1) { onReveal(r.n); return; }
+          const n = r.n.k === 0 ? r.n : r.n.p;
           if (n && n !== props.current.view) onZoom(n);
         }}
         onContextMenu={(ev) => { ev.preventDefault(); if (st.current.z > 1) { resetCam(); layout(); } else onUp(); }}
       />
       <div className="zoom">
+        <button className="fly" onClick={fly} disabled={flying} title="Slow cinematic zoom out (any input stops it)">{flying ? "…" : "Pull out"}</button>
         <button onClick={() => zoomAt(st.current.W / 2, st.current.H / 2, 1 / 1.6)} title="Zoom out (-)" disabled={zoomPct <= 100}>−</button>
         <button className="pct" onClick={() => { resetCam(); layout(); }} title="Reset (0)" disabled={zoomPct <= 100}>{zoomPct}%</button>
         <button onClick={() => zoomAt(st.current.W / 2, st.current.H / 2, 1.6)} title="Zoom in (+)">+</button>

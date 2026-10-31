@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Data, Drive, N, Quota, ScanResult } from "./types";
-import { inSubtree, parseSize } from "./util";
+import { inSubtree, parseSize, pathOf } from "./util";
 import { buildPlans } from "./planner";
 import { Treemap } from "./components/Treemap";
 import { TreeIndex } from "./components/TreeIndex";
@@ -148,6 +148,8 @@ export default function App() {
   const toggle = useCallback((n: N) => setExpanded((s) => { const t = new Set(s); t.has(n) ? t.delete(n) : t.add(n); return t; }), []);
 
   const reveal = useCallback((path: string) => { invoke("reveal", { path }); }, []);
+  // "Small files" has no path of its own, so show its folder
+  const revealNode = useCallback((n: N) => reveal(pathOf(n.k === 2 && n.p ? n.p : n)), [reveal]);
 
   const issue = useCallback((bytes: number) => {
     if (!data) { say("Scan a volume first."); return; }
@@ -202,11 +204,11 @@ export default function App() {
       if (e.key === "Escape" && scanning) cancelScan();
       else if (e.key === "Escape" && !typing) setSel(null);
       else if ((e.key === "Backspace" || (e.altKey && e.key === "ArrowLeft")) && !typing) { e.preventDefault(); up(); }
-      else if (e.key === "Enter" && !typing && sel?.k === 0) zoom(sel);
+      else if (e.key === "Enter" && !typing && sel) { sel.k === 0 ? zoom(sel) : revealNode(sel); }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [scanning, cancelScan, up, sel, zoom]);
+  }, [scanning, cancelScan, up, sel, zoom, revealNode]);
 
   const marked = useMemo(() => (tab === "quota" && quota ? quota.checked[quota.active] : null), [tab, quota]);
   const showWelcome = !scanning && (home || !data);
@@ -225,14 +227,14 @@ export default function App() {
             <button className={tab === "quota" ? "on" : ""} onClick={() => setTab("quota")}>Free</button>
           </div>
           {tab === "index" ? (
-            view ? <TreeIndex view={view} sel={sel} expanded={expanded} revealTok={revealTok} onToggle={toggle} onSelect={(n) => select(n, true)} onZoom={zoom} />
+            view ? <TreeIndex view={view} sel={sel} expanded={expanded} revealTok={revealTok} onToggle={toggle} onSelect={(n) => select(n, true)} onZoom={zoom} onReveal={revealNode} />
               : <div className="empty">No data</div>
           ) : (
             <QuotaPanel quota={quota} onIssue={issue} onPlan={(id) => setQuota((q) => (q ? { ...q, active: id } : q))} onToggle={toggleItem} onLocate={(n) => select(n)} onReveal={reveal} />
           )}
         </aside>
         <section className="stage">
-          {view && <Treemap view={view} sel={sel} marked={marked} cat={cat} onSelect={(n) => select(n)} onZoom={zoom} onUp={up} />}
+          {view && <Treemap view={view} sel={sel} marked={marked} cat={cat} onSelect={(n) => select(n)} onZoom={zoom} onUp={up} onReveal={revealNode} />}
           {scanning && <ScanOverlay path={scanning} onAbort={cancelScan} />}
           {showWelcome && <Welcome drives={drives} onScan={startScan} onBack={data ? () => setHome(false) : null} />}
         </section>

@@ -1,16 +1,15 @@
 import type { N } from "./types";
 
 export const CATS: Record<string, { label: string; color: string; ink: string; exts: string }> = {
-  video: { label: "Video", color: "#e6ebf2", ink: "#0b0e12", exts: "mp4 mkv avi mov wmv flv webm m4v mpg mpeg vob m2ts" },
-  archives: { label: "Archive", color: "#b9c3d1", ink: "#0b0e12", exts: "zip rar 7z tar gz bz2 xz iso img vhd vhdx vmdk cab wim bak" },
-  images: { label: "Image", color: "#94a1b4", ink: "#0b0e12", exts: "jpg jpeg png gif bmp webp tif tiff heic raw cr2 nef psd svg ico dng" },
-  documents: { label: "Docs", color: "#70809a", ink: "#0b0e12", exts: "pdf doc docx xls xlsx ppt pptx txt md rtf odt csv epub" },
-  code: { label: "Code", color: "#55657d", ink: "#e6ebf2", exts: "js ts jsx tsx json html css rs py c cpp h java cs go rb php sql xml yml yaml toml db sqlite log map o obj pdb rlib lib" },
-  apps: { label: "App", color: "#3f4d62", ink: "#e6ebf2", exts: "exe dll sys msi msix dat bin so node pak mui cat" },
-  audio: { label: "Audio", color: "#2f3a4b", ink: "#c3ccd9", exts: "mp3 flac wav aac ogg m4a wma opus aiff" },
-  other: { label: "Other", color: "#232c3a", ink: "#9aa5b5", exts: "" },
-};
-const extCat = new Map<string, string>();
+  video: { label: "Video", color: "#ef5b6b", ink: "#0b0e12", exts: "mp4 mkv avi mov wmv flv webm m4v mpg mpeg vob m2ts" },
+  archives: { label: "Archive", color: "#f2b84b", ink: "#0b0e12", exts: "zip rar 7z tar gz bz2 xz iso img vhd vhdx vmdk cab wim bak" },
+  images: { label: "Image", color: "#4fd1a5", ink: "#0b0e12", exts: "jpg jpeg png gif bmp webp tif tiff heic raw cr2 nef psd svg ico dng" },
+  documents: { label: "Docs", color: "#5b9df2", ink: "#0b0e12", exts: "pdf doc docx xls xlsx ppt pptx txt md rtf odt csv epub" },
+  code: { label: "Code", color: "#a78bfa", ink: "#0b0e12", exts: "js ts jsx tsx json html css rs py c cpp h java cs go rb php sql xml yml yaml toml db sqlite log map o obj pdb rlib lib" },
+  apps: { label: "App", color: "#8aa0bd", ink: "#0b0e12", exts: "exe dll sys msi msix dat bin so node pak mui cat" },
+  audio: { label: "Audio", color: "#f2864b", ink: "#0b0e12", exts: "mp3 flac wav aac ogg m4a wma opus aiff" },
+  other: { label: "Other", color: "#3b4656", ink: "#c3ccd9", exts: "" },
+};const extCat = new Map<string, string>();
 for (const [k, v] of Object.entries(CATS)) for (const e of v.exts.split(" ")) if (e) extCat.set(e, k);
 
 export const extOf = (name: string) => {

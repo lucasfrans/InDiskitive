@@ -15,9 +15,10 @@ interface Props {
   onToggle: (n: N) => void;
   onSelect: (n: N) => void;
   onZoom: (n: N) => void;
+  onReveal: (n: N) => void;
 }
 
-function TreeIndexImpl({ view, sel, expanded, revealTok, onToggle, onSelect, onZoom }: Props) {
+function TreeIndexImpl({ view, sel, expanded, revealTok, onToggle, onSelect, onZoom, onReveal }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
   const [h, setH] = useState(600);
@@ -73,8 +74,8 @@ function TreeIndexImpl({ view, sel, expanded, revealTok, onToggle, onSelect, onZ
               key={i}
               className={"row" + (n === sel ? " sel" : "")}
               style={style}
-              onClick={() => onSelect(n)}
-              onDoubleClick={() => n.k === 0 && n !== view && onZoom(n)}
+              onClick={(e) => { onSelect(n); if (e.ctrlKey || e.metaKey) onReveal(n); }}
+              onDoubleClick={() => { if (n.k === 0) { if (n !== view) onZoom(n); } else onReveal(n); }}
             >
               <span className="bar" style={{ width: w + "%" }} />
               <span className="chev" onClick={(e) => { if (isDir) { e.stopPropagation(); onToggle(n); } }}>

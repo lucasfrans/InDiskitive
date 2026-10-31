@@ -25,6 +25,8 @@ Windows may show a SmartScreen warning because the file is not code-signed. Choo
 - **Treemap of your whole drive.** Every folder and file is drawn to scale, coloured by file type.
 - **Fast.** A multithreaded Rust scanner walks a drive in seconds. Run it as administrator and it reads the NTFS Master File Table directly, which is much faster still.
 - **Zoom and pan.** Scroll to zoom into any part of the map (detail sharpens as you go), drag to pan, <kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> to zoom or reset.
+- **Show in Explorer.** Double-click a file (map or tree) or Ctrl+click anything to jump to it in File Explorer.
+- **Pull out.** One button, bottom right: a slow cinematic zoom from inside a single tile back out to the whole map.
 - **Instant switching.** Finished scans are kept in memory, so clicking between drives doesn't rescan. Use the `↻` next to a drive to refresh it.
 - **Free N GB.** Type `free 120gb` and get a few short lists of what to clear: the fewest items that cover the amount, safe-to-delete caches, whole game folders, and more.
 - **Whole units, not fragments.** Game installs and folders are suggested as a whole, never as half-deleted pieces.
@@ -47,7 +49,7 @@ Press <kbd>/</kbd> to focus the command line at the top.
 | `up` | Go up a level |
 | `drives` | Back to the volume list |
 
-Other controls: click a block to select it, double-click to open a folder, scroll to zoom and drag to pan, right-click to reset zoom (or go up a level when not zoomed), <kbd>Backspace</kbd> to go up, <kbd>Esc</kbd> to cancel a scan.
+Other controls: click a block to select it, double-click to open a folder or show a file in Explorer (Ctrl+click works on anything), scroll to zoom and drag to pan, right-click to reset zoom (or go up a level when not zoomed), <kbd>Backspace</kbd> to go up, <kbd>Esc</kbd> to cancel a scan.
 
 ## Admin mode
 
