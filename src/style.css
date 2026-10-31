@@ -170,3 +170,10 @@ kbd { font: 10px var(--mono); color: var(--dim); border: 1px solid var(--line); 
 .intro .e { color: #f08a8a; margin: 12px 0 0; }
 .intro .by { margin: 56px 0 0; color: var(--faint); font: 11px var(--mono); }
 .welcome .credit { color: var(--faint); font: 11px var(--mono); margin-top: 18px; }
+/* map zoom */
+.map-wrap canvas.zoomed { cursor: grab; }
+.map-wrap canvas.zoomed:active { cursor: grabbing; }
+.zoom { position: absolute; right: 12px; bottom: 12px; z-index: 6; display: flex; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.zoom button { border: 0; border-radius: 0; padding: 5px 11px; min-width: 32px; color: var(--dim); }
+.zoom button:hover:not(:disabled) { color: var(--ink); }
+.zoom .pct { font: 11px var(--mono); border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 58px; }

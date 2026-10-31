@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { N } from "../types";
 import { CATS, catOf, fmt, pathOf, pct } from "../util";
 
@@ -59,7 +59,11 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const tip = useRef<HTMLDivElement>(null);
-  const st = useRef({ rects: [] as Rect[], W: 0, H: 0, dpr: 1, hover: null as Rect | null, raf: 0, pat: null as CanvasPattern | null });
+  const st = useRef({
+    rects: [] as Rect[], W: 0, H: 0, dpr: 1, hover: null as Rect | null, raf: 0, lraf: 0, pat: null as CanvasPattern | null,
+    z: 1, ox: 0, oy: 0, down: null as { x: number; y: number; ox: number; oy: number } | null, moved: false,
+  });
+  const [zoomPct, setZoomPct] = useState(100);
   const props = useRef({ view, sel, marked, cat });
   props.current = { view, sel, marked, cat };
 
@@ -72,6 +76,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     ctx.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
     ctx.fillStyle = "#0b0e12";
     ctx.fillRect(0, 0, s.W, s.H);
+    ctx.setTransform(s.dpr, 0, 0, s.dpr, -s.ox * s.dpr, -s.oy * s.dpr);
     ctx.textBaseline = "middle";
     ctx.font = FONT;
 
@@ -86,7 +91,9 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
           ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
           if (w > 64 && h > 38) {
             ctx.fillStyle = "#6b7686";
-            label(ctx, n.n, x + 5, y + 9, w - 10);
+            const lx = Math.max(x, s.ox) + 5, lw = Math.min(x + w, s.ox + s.W) - Math.max(x, s.ox) - 10;
+            const ly = Math.max(y, s.oy) + 9;
+            if (lw > 30 && ly < y + h - 12) label(ctx, n.n, lx, ly, lw);
           }
         }
         continue;
@@ -100,8 +107,13 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
       if (w > 54 && h > 16 && !dim) {
         const ink = c ? CATS[c].ink : "#e6ebf2";
         ctx.fillStyle = ink;
-        label(ctx, n.k === 2 ? `Small files (${n.f.toLocaleString()})` : n.n, x + 5, y + 9, w - 10);
-        if (h > 32 && w > 48) { ctx.globalAlpha = 0.65; label(ctx, fmt(n.s), x + 5, y + 22, w - 10); ctx.globalAlpha = 1; }
+        // keep the label inside the visible part of a big, partly off-screen tile
+        const lx = Math.max(x, s.ox) + 5, lw = Math.min(x + w, s.ox + s.W) - Math.max(x, s.ox) - 10;
+        const ly = Math.max(y, s.oy) + 9;
+        if (lw > 30 && ly < y + h - 8) {
+          label(ctx, n.k === 2 ? `Small files (${n.f.toLocaleString()})` : n.n, lx, ly, lw);
+          if (h > 32 && w > 48 && ly + 13 < y + h - 4) { ctx.globalAlpha = 0.65; label(ctx, fmt(n.s), lx, ly + 13, lw); ctx.globalAlpha = 1; }
+        }
       }
       ctx.globalAlpha = 1;
     }
@@ -133,19 +145,49 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     const s = st.current;
     s.rects = [];
     s.hover = null;
-    const build = (n: N, x: number, y: number, w: number, h: number, d: number) => {
+    const build = (n: N, x: number, y: number, w: number, h: number, d: number, vis: (x: number, y: number, w: number, h: number) => boolean) => {
       const canNest = n.k === 0 && !!n.c?.length && w > 12 && h > 12;
       s.rects.push({ n, x, y, w, h, d, leaf: !canNest });
       if (!canNest) return;
       const pad = d === 0 ? 0 : 1;
       const hdr = d > 0 && w > 64 && h > 38 ? 15 : 0;
       squarify(n.c!, x + pad, y + pad + hdr, w - 2 * pad, h - 2 * pad - hdr, (c, cx, cy, cw, ch) => {
-        if (cw * ch >= 5) build(c, cx + 0.5, cy + 0.5, cw - 1, ch - 1, d + 1);
+        if (cw * ch >= 5 && vis(cx, cy, cw, ch)) build(c, cx + 0.5, cy + 0.5, cw - 1, ch - 1, d + 1, vis);
       });
     };
-    if (s.W > 0) build(props.current.view, 0, 0, s.W, s.H, 0);
+    const vis = (x: number, y: number, w: number, h: number) =>
+      x + w >= s.ox && x <= s.ox + s.W && y + h >= s.oy && y <= s.oy + s.H;
+    if (s.W > 0) build(props.current.view, 0, 0, s.W * s.z, s.H * s.z, 0, vis);
     draw();
   }, [draw]);
+
+  const scheduleLayout = useCallback(() => {
+    const s = st.current;
+    if (!s.lraf) s.lraf = requestAnimationFrame(() => { s.lraf = 0; layout(); });
+  }, [layout]);
+
+  const clampCam = () => {
+    const s = st.current;
+    s.ox = Math.min(Math.max(0, s.ox), Math.max(0, s.W * s.z - s.W));
+    s.oy = Math.min(Math.max(0, s.oy), Math.max(0, s.H * s.z - s.H));
+  };
+  const zoomAt = useCallback((sx: number, sy: number, factor: number) => {
+    const s = st.current;
+    const nz = Math.min(200, Math.max(1, s.z * factor));
+    if (nz === s.z) return;
+    const k = nz / s.z;
+    s.ox = (s.ox + sx) * k - sx;
+    s.oy = (s.oy + sy) * k - sy;
+    s.z = nz;
+    clampCam();
+    setZoomPct(Math.round(nz * 100));
+    scheduleLayout();
+  }, [scheduleLayout]);
+  const resetCam = useCallback(() => {
+    const s = st.current;
+    s.z = 1; s.ox = 0; s.oy = 0;
+    setZoomPct(100);
+  }, []);
 
   useEffect(() => {
     const el = wrap.current!;
@@ -156,6 +198,7 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
       s.W = Math.floor(b.width); s.H = Math.floor(b.height);
       const c = cv.current!;
       c.width = Math.floor(s.W * s.dpr); c.height = Math.floor(s.H * s.dpr);
+      clampCam();
       layout();
     };
     const ro = new ResizeObserver(resize);
@@ -163,12 +206,25 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     return () => ro.disconnect();
   }, [layout]);
 
-  useEffect(layout, [view, layout]);
+  useEffect(() => { resetCam(); layout(); }, [view, layout, resetCam]);
+
+  // keyboard: + / - zoom, 0 resets (not while typing in the command line)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === "INPUT") return;
+      const s = st.current;
+      if (e.key === "+" || e.key === "=") zoomAt(s.W / 2, s.H / 2, 1.6);
+      else if (e.key === "-" || e.key === "_") zoomAt(s.W / 2, s.H / 2, 1 / 1.6);
+      else if (e.key === "0") { resetCam(); layout(); }
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [zoomAt, resetCam, layout]);
   useEffect(schedule, [sel, marked, cat, schedule]);
 
   const hit = (ev: React.MouseEvent) => {
     const b = cv.current!.getBoundingClientRect();
-    const x = ev.clientX - b.left, y = ev.clientY - b.top;
+    const x = ev.clientX - b.left + st.current.ox, y = ev.clientY - b.top + st.current.oy;
     const rects = st.current.rects;
     for (let i = rects.length - 1; i >= 0; i--) {
       const r = rects[i];
@@ -178,8 +234,19 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
   };
 
   const onMove = (ev: React.MouseEvent) => {
-    const r = hit(ev);
     const s = st.current;
+    if (s.down && (ev.buttons & 1)) {
+      const dx = ev.clientX - s.down.x, dy = ev.clientY - s.down.y;
+      if (!s.moved && Math.hypot(dx, dy) > 4) s.moved = true;
+      if (s.moved && s.z > 1) {
+        s.ox = s.down.ox - dx; s.oy = s.down.oy - dy;
+        clampCam();
+        tip.current!.hidden = true;
+        scheduleLayout();
+        return;
+      }
+    }
+    const r = hit(ev);
     if (r !== s.hover) { s.hover = r; schedule(); }
     const t = tip.current!;
     if (!r) { t.hidden = true; return; }
@@ -201,16 +268,25 @@ export function Treemap({ view, sel, marked, cat, onSelect, onZoom, onUp }: Prop
     <div className="map-wrap" ref={wrap}>
       <canvas
         ref={cv}
+        className={zoomPct > 100 ? "zoomed" : ""}
         onMouseMove={onMove}
-        onMouseLeave={() => { st.current.hover = null; tip.current!.hidden = true; schedule(); }}
-        onClick={(ev) => { const r = hit(ev); if (r) onSelect(r.n); }}
+        onMouseDown={(ev) => { const s = st.current; s.down = { x: ev.clientX, y: ev.clientY, ox: s.ox, oy: s.oy }; s.moved = false; }}
+        onMouseUp={() => { st.current.down = null; }}
+        onWheel={(ev) => { const b = cv.current!.getBoundingClientRect(); zoomAt(ev.clientX - b.left, ev.clientY - b.top, Math.exp(-ev.deltaY * 0.0018)); }}
+        onMouseLeave={() => { const s = st.current; s.hover = null; s.down = null; tip.current!.hidden = true; schedule(); }}
+        onClick={(ev) => { if (st.current.moved) { st.current.moved = false; return; } const r = hit(ev); if (r) onSelect(r.n); }}
         onDoubleClick={(ev) => {
           const r = hit(ev);
           const n = r && (r.n.k === 0 ? r.n : r.n.p);
           if (n && n !== props.current.view) onZoom(n);
         }}
-        onContextMenu={(ev) => { ev.preventDefault(); onUp(); }}
+        onContextMenu={(ev) => { ev.preventDefault(); if (st.current.z > 1) { resetCam(); layout(); } else onUp(); }}
       />
+      <div className="zoom">
+        <button onClick={() => zoomAt(st.current.W / 2, st.current.H / 2, 1 / 1.6)} title="Zoom out (-)" disabled={zoomPct <= 100}>−</button>
+        <button className="pct" onClick={() => { resetCam(); layout(); }} title="Reset (0)" disabled={zoomPct <= 100}>{zoomPct}%</button>
+        <button onClick={() => zoomAt(st.current.W / 2, st.current.H / 2, 1.6)} title="Zoom in (+)">+</button>
+      </div>
       <div className="tip" ref={tip} hidden />
     </div>
   );
